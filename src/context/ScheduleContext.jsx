@@ -1,137 +1,75 @@
-import React, { createContext, useReducer, useEffect, useCallback } from 'react';
+import React, { createContext } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '../services/api';
 
 export const ScheduleContext = createContext();
 
-const initialState = {
-  shifts: [],
-  nurses: [],
-  wards: [],
-  leaveRequests: [],
-  loading: true,
-  error: null,
-};
-
-const reducer = (state, action) => {
-  switch (action.type) {
-    case 'FETCH_START':
-      return { ...state, loading: true, error: null };
-    case 'FETCH_SUCCESS':
-      return { 
-        ...state, 
-        loading: false, 
-        shifts: action.payload.shifts,
-        nurses: action.payload.nurses,
-        wards: action.payload.wards,
-        leaveRequests: action.payload.leaveRequests
-      };
-    case 'FETCH_ERROR':
-      return { ...state, loading: false, error: action.payload };
-    case 'UPDATE_SHIFT':
-      return {
-        ...state,
-        shifts: state.shifts.map(s => s.id === action.payload.id ? action.payload : s)
-      };
-    case 'ADD_SHIFT':
-      return {
-        ...state,
-        shifts: [...state.shifts, action.payload]
-      };
-    case 'UPDATE_NURSE':
-      return {
-        ...state,
-        nurses: state.nurses.map(n => n.id === action.payload.id ? action.payload : n)
-      };
-    case 'ADD_LEAVE_REQUEST':
-      return {
-        ...state,
-        leaveRequests: [action.payload, ...state.leaveRequests]
-      };
-    case 'UPDATE_LEAVE_REQUEST':
-      return {
-        ...state,
-        leaveRequests: state.leaveRequests.map(lr => lr.id === action.payload.id ? action.payload : lr)
-      };
-    default:
-      return state;
-  }
-};
-
 export const ScheduleProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const queryClient = useQueryClient();
 
-  const loadData = useCallback(async () => {
-    dispatch({ type: 'FETCH_START' });
-    try {
-      const data = await api.fetchScheduleData();
-      const leaveRequests = await api.fetchLeaveRequests();
-      dispatch({ type: 'FETCH_SUCCESS', payload: { ...data, leaveRequests } });
-    } catch (err) {
-      dispatch({ type: 'FETCH_ERROR', payload: err.message });
-    }
-  }, []);
+  const { data: nurses = [], isLoading: loadingNurses, error: errorNurses } = useQuery({ queryKey: ['nurses'], queryFn: api.fetchNurses });
+  const { data: wards = [], isLoading: loadingWards, error: errorWards } = useQuery({ queryKey: ['wards'], queryFn: api.fetchWards });
+  const { data: shifts = [], isLoading: loadingShifts, error: errorShifts } = useQuery({ queryKey: ['shifts'], queryFn: api.fetchShifts });
+  const { data: leaveRequests = [], isLoading: loadingLeaves, error: errorLeaves } = useQuery({ queryKey: ['leaves'], queryFn: api.fetchLeaves });
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const loading = loadingNurses || loadingWards || loadingShifts || loadingLeaves;
+  const error = errorNurses || errorWards || errorShifts || errorLeaves ? 'Error loading data' : null;
 
-  const handleAssignShift = async (shiftId, nurseId) => {
-    // Optimistic Update
-    const originalShift = state.shifts.find(s => s.id === shiftId);
-    dispatch({
-      type: 'UPDATE_SHIFT',
-      payload: { ...originalShift, nurseId, status: 'assigned' }
-    });
-    
-    try {
-      const updatedShift = await api.assignShift(shiftId, nurseId);
-      dispatch({ type: 'UPDATE_SHIFT', payload: updatedShift });
-    } catch (error) {
-      dispatch({ type: 'UPDATE_SHIFT', payload: originalShift });
-      throw error;
-    }
+  const loadData = () => {
+    queryClient.invalidateQueries();
   };
 
-  const handleUpdateShift = useCallback(async (updatedShift) => {
-    const result = await api.updateShift(updatedShift);
-    dispatch({ type: 'UPDATE_SHIFT', payload: result });
-    return result;
-  }, []);
+  const updateShiftMutation = useMutation({
+    mutationFn: (data) => api.updateShift(data.id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shifts'] }),
+  });
 
-  const handleCreateShift = useCallback(async (newShift) => {
-    const createdShift = await api.createShift(newShift);
-    dispatch({ type: 'ADD_SHIFT', payload: createdShift });
-    return createdShift;
-  }, []);
+  const createShiftMutation = useMutation({
+    mutationFn: api.createShift,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shifts'] }),
+  });
 
-  const handleUpdateAvailability = useCallback(async (nurseId, date, status) => {
-    const nurse = state.nurses.find(n => n.id === nurseId);
-    const updatedNurse = await api.updateAvailability(nurseId, date, status);
-    dispatch({ type: 'UPDATE_NURSE', payload: updatedNurse });
-  }, [state.nurses]);
+  const createLeaveMutation = useMutation({
+    mutationFn: api.createLeave,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaves'] }),
+  });
 
-  const handleSubmitLeave = useCallback(async (requestData) => {
-    const newRequest = await api.submitLeaveRequest(requestData);
-    dispatch({ type: 'ADD_LEAVE_REQUEST', payload: newRequest });
-    return newRequest;
-  }, []);
+  const updateLeaveStatusMutation = useMutation({
+    mutationFn: (data) => api.updateLeaveStatus(data.id, data.status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaves'] }),
+  });
 
-  const handleUpdateLeaveStatus = useCallback(async (id, status) => {
-    const updated = await api.updateLeaveRequestStatus(id, status);
-    dispatch({ type: 'UPDATE_LEAVE_REQUEST', payload: updated });
-    return updated;
-  }, []);
+  const handleAssignShift = async (shiftId, nurseId) => {
+    return updateShiftMutation.mutateAsync({ id: shiftId, nurseId, status: 'assigned' });
+  };
+
+  const handleUpdateShift = async (updatedShift) => {
+    return updateShiftMutation.mutateAsync(updatedShift);
+  };
+
+  const handleCreateShift = async (newShift) => {
+    return createShiftMutation.mutateAsync(newShift);
+  };
+
+  const handleUpdateAvailability = async (nurseId, date, status) => {
+    // Currently not fully supported by backend
+    console.warn('Availability update not fully implemented in API');
+  };
+
+  const handleSubmitLeave = async (requestData) => {
+    return createLeaveMutation.mutateAsync(requestData);
+  };
+
+  const handleUpdateLeaveStatus = async (id, status) => {
+    return updateLeaveStatusMutation.mutateAsync({ id, status });
+  };
 
   return (
     <ScheduleContext.Provider value={{ 
-        ...state, 
-        loadData, 
-        handleAssignShift, 
-        handleUpdateShift,
-        handleCreateShift, 
-        handleUpdateAvailability,
-        handleSubmitLeave,
-        handleUpdateLeaveStatus
+        shifts, nurses, wards, leaveRequests, loading, error,
+        loadData, handleAssignShift, handleUpdateShift,
+        handleCreateShift, handleUpdateAvailability,
+        handleSubmitLeave, handleUpdateLeaveStatus
     }}>
       {children}
     </ScheduleContext.Provider>

@@ -1,7 +1,9 @@
 import React, { useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { ScheduleContext } from '../context/ScheduleContext';
-import { Calendar, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Calendar, Clock, CheckCircle2, XCircle, CalendarX } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchAvailability, updateAvailability } from '../services/api';
 
 const NurseDashboard = () => {
   const { user } = useContext(AuthContext);
@@ -13,12 +15,37 @@ const NurseDashboard = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Find nurse ID based on username (mock logic since login is simple)
-  // Assuming 'nurse' logs in as 'Alice Smith' (n1) for demo purposes
-  const myNurseId = 'n1'; 
-  
+  // Use the nurseId from the authenticated user context
+  const myNurseId = user?.nurseId;
+  const queryClient = useQueryClient();
+
+  const { data: availability = [] } = useQuery({
+    queryKey: ['availability'],
+    queryFn: fetchAvailability
+  });
+
+  const updateAvailabilityMutation = useMutation({
+    mutationFn: updateAvailability,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['availability'] });
+      setAvailMessage('Availability updated.');
+      setTimeout(() => setAvailMessage(''), 3000);
+      setAvailDate('');
+    }
+  });
+
+  const [availDate, setAvailDate] = useState('');
+  const [availMessage, setAvailMessage] = useState('');
+
   const myShifts = shifts.filter(s => s.nurseId === myNurseId).sort((a, b) => new Date(a.date) - new Date(b.date));
   const myLeaves = leaveRequests.filter(lr => lr.nurseId === myNurseId);
+  const myUnavailableDates = availability.filter(a => a.nurseId === myNurseId && a.isAvailable === 0);
+
+  const onSubmitAvailability = (e) => {
+    e.preventDefault();
+    if (!availDate) return;
+    updateAvailabilityMutation.mutate({ date: availDate, isAvailable: false });
+  };
 
   const onSubmitLeave = async (e) => {
     e.preventDefault();
@@ -83,6 +110,52 @@ const NurseDashboard = () => {
                 ))}
               </ul>
             )}
+          </div>
+
+          {/* Set Unavailability */}
+          <div className="mt-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <CalendarX className="w-5 h-5 text-orange-600" /> Set Unavailability
+            </h2>
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              {availMessage && (
+                <div className="mb-4 p-3 bg-green-50 text-green-700 rounded border border-green-200 text-sm font-medium">
+                  {availMessage}
+                </div>
+              )}
+              <form onSubmit={onSubmitAvailability} className="flex gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <input 
+                    type="date" 
+                    required
+                    value={availDate}
+                    onChange={e => setAvailDate(e.target.value)}
+                    className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={updateAvailabilityMutation.isPending}
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded transition-colors text-sm disabled:opacity-50"
+                >
+                  Mark Unavailable
+                </button>
+              </form>
+              
+              {myUnavailableDates.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <p className="text-sm font-bold text-gray-700 mb-2">My Unavailable Dates:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {myUnavailableDates.map(a => (
+                      <span key={a.id} className="text-xs font-bold bg-orange-50 text-orange-800 border border-orange-200 px-2 py-1 rounded">
+                        {new Date(a.date).toLocaleDateString()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

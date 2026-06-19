@@ -11,6 +11,8 @@ import OvertimeTrackerContainer from '../features/overtime/OvertimeTrackerContai
 import AvailabilityContainer from '../features/availability/AvailabilityContainer';
 import LeaveRequestsContainer from '../features/leave/LeaveRequestsContainer';
 import ScheduleHistoryContainer from '../features/history/ScheduleHistoryContainer';
+import ProfilePage from '../pages/ProfilePage';
+import SwapBoardPage from '../pages/SwapBoardPage';
 
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { user, loading } = useContext(AuthContext);
@@ -54,7 +56,8 @@ const AppRoutes = () => {
         }
       >
         <Route path="/nurse-dashboard" element={<NurseDashboard />} />
-        <Route path="/profile" element={<div className="p-8 text-gray-900"><h1 className="text-3xl font-bold">Nurse Profile</h1><p className="text-gray-500 mt-2">Manage your personal settings here.</p></div>} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/swaps" element={<SwapBoardPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

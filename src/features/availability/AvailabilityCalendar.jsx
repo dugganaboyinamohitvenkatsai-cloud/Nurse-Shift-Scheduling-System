@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2, XCircle, HelpCircle, Palmtree } from 'lucide-react';
 import { cn } from '../../components/common/SkeletonLoader';
 
-const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
+const AvailabilityCalendar = ({ nurse, availabilityData = [], leaveRequestsData = [], onUpdateAvailability }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const daysInMonth = useMemo(() => {
@@ -10,7 +10,7 @@ const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysCount = new Date(year, month + 1, 0).getDate();
-    
+
     const days = [];
     for (let i = 0; i < firstDay; i++) days.push(null);
     for (let i = 1; i <= daysCount; i++) days.push(new Date(year, month, i));
@@ -27,18 +27,44 @@ const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
 
   const getStatus = (date) => {
     if (!date) return null;
-    const dateString = date.toISOString().split('T')[0];
-    return nurse.availability?.[dateString] || 'available';
+    
+    // Check if the date is within an approved leave request
+    const isLeave = leaveRequestsData.some(lr => {
+      const start = new Date(lr.startDate);
+      const end = new Date(lr.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      const testDate = new Date(date);
+      testDate.setHours(12, 0, 0, 0); // safe check
+      return testDate >= start && testDate <= end;
+    });
+    
+    if (isLeave) return 'on_leave';
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+
+    const record = availabilityData.find(a => a.date === dateString);
+    if (record) {
+      return record.isAvailable === 0 ? 'unavailable' : 'available';
+    }
+    return 'available';
   };
 
   const cycleStatus = (date) => {
     const current = getStatus(date);
-    const dateString = date.toISOString().split('T')[0];
+    if (current === 'on_leave') return; // Cannot toggle if on approved leave
     
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+
     let next = 'available';
     if (current === 'available') next = 'unavailable';
-    else if (current === 'unavailable') next = 'preference';
-    
+
     onUpdateAvailability(dateString, next);
   };
 
@@ -46,6 +72,7 @@ const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
     switch (status) {
       case 'available': return "bg-white text-gray-900 border-gray-200 hover:border-gray-300 hover:bg-gray-50";
       case 'unavailable': return "bg-red-50 text-red-700 border-red-200 font-bold";
+      case 'on_leave': return "bg-purple-50 text-purple-700 border-purple-200 font-bold";
       case 'preference': return "bg-green-50 text-green-700 border-green-200 font-bold";
       default: return "bg-white border-gray-200 text-gray-900";
     }
@@ -54,7 +81,7 @@ const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'unavailable': return <XCircle className="w-4 h-4 text-red-500 mt-1" />;
-      case 'preference': return <CheckCircle2 className="w-4 h-4 text-green-500 mt-1" />;
+      case 'on_leave': return <Palmtree className="w-4 h-4 text-purple-500 mt-1" title="On Leave" />;
       default: return null;
     }
   };
@@ -73,7 +100,7 @@ const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
           <button onClick={handlePrevMonth} className="p-2 hover:bg-gray-100 rounded-md text-gray-600 transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <button 
+          <button
             onClick={() => setCurrentDate(new Date())}
             className="px-4 py-1.5 text-sm font-medium hover:bg-gray-100 text-gray-700 rounded-md transition-colors mx-1"
           >
@@ -89,7 +116,7 @@ const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
       <div className="px-6 py-3 border-b border-gray-200 bg-white flex gap-6 text-sm shrink-0">
         <div className="flex items-center gap-2 text-gray-600"><span className="w-3 h-3 rounded-full bg-white border border-gray-300"></span> Available</div>
         <div className="flex items-center gap-2 text-red-700"><span className="w-3 h-3 rounded-full bg-red-100 border border-red-300"></span> Unavailable</div>
-        <div className="flex items-center gap-2 text-green-700"><span className="w-3 h-3 rounded-full bg-green-100 border border-green-300"></span> Preferred</div>
+        <div className="flex items-center gap-2 text-purple-700"><span className="w-3 h-3 rounded-full bg-purple-100 border border-purple-300"></span> On Leave</div>
       </div>
 
       <div className="flex-1 flex flex-col min-h-0 bg-white">
@@ -103,13 +130,13 @@ const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
         <div className="flex-1 grid grid-cols-7 auto-rows-fr overflow-y-auto">
           {daysInMonth.map((date, i) => {
             if (!date) return <div key={`empty-${i}`} className="bg-gray-50 border-r border-b border-gray-200" />;
-            
+
             const status = getStatus(date);
             const isToday = new Date().toDateString() === date.toDateString();
 
             return (
-              <div 
-                key={i} 
+              <div
+                key={i}
                 onClick={() => cycleStatus(date)}
                 className={cn(
                   "p-3 border-r border-b cursor-pointer transition-colors flex flex-col items-center justify-center relative group",
@@ -118,7 +145,7 @@ const AvailabilityCalendar = ({ nurse, onUpdateAvailability }) => {
                 )}
               >
                 {isToday && <div className="absolute top-1 left-1 w-2 h-2 rounded-full bg-blue-500"></div>}
-                
+
                 <span className={cn(
                   "text-lg",
                   isToday ? "font-bold text-blue-700" : ""

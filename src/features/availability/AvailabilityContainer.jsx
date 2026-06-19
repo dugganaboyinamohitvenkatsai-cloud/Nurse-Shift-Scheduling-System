@@ -2,27 +2,44 @@ import React, { useContext, useState, useCallback, useMemo } from 'react';
 import { ScheduleContext } from '../../context/ScheduleContext';
 import SkeletonLoader from '../../components/common/SkeletonLoader';
 import AvailabilityCalendar from './AvailabilityCalendar';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchAvailability, updateAvailability } from '../../services/api';
 
 const AvailabilityContainer = () => {
-  const { nurses, updateNurseAvailability, loading, error } = useContext(ScheduleContext);
+  const { nurses, leaveRequests, updateNurseAvailability, loading, error } = useContext(ScheduleContext);
   const [selectedNurseId, setSelectedNurseId] = useState(null);
 
   // Default to first nurse if none selected
   const activeNurseId = selectedNurseId || (nurses.length > 0 ? nurses[0].id : null);
-  
-  const activeNurse = useMemo(() => 
-    nurses.find(n => n.id === activeNurseId), 
-  [nurses, activeNurseId]);
+
+  const activeNurse = useMemo(() =>
+    nurses.find(n => n.id === activeNurseId),
+    [nurses, activeNurseId]);
+
+  const queryClient = useQueryClient();
+
+  const { data: availabilityData = [] } = useQuery({
+    queryKey: ['availability'],
+    queryFn: fetchAvailability
+  });
+
+  const updateAvailabilityMutation = useMutation({
+    mutationFn: updateAvailability,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['availability'] });
+    }
+  });
 
   const handleUpdateAvailability = useCallback(async (date, status) => {
     if (!activeNurseId) return;
     try {
-      await updateNurseAvailability(activeNurseId, date, status);
+      const isAvailable = status === 'available';
+      await updateAvailabilityMutation.mutateAsync({ nurseId: activeNurseId, date, isAvailable });
     } catch (err) {
       console.error("Failed to update availability:", err);
       alert("Failed to update availability. Please try again.");
     }
-  }, [activeNurseId, updateNurseAvailability]);
+  }, [activeNurseId, updateAvailabilityMutation]);
 
   if (loading) {
     return (
@@ -37,7 +54,7 @@ const AvailabilityContainer = () => {
 
   return (
     <div className="h-full flex flex-col md:flex-row p-6 gap-6 overflow-hidden bg-gray-50">
-      
+
       {/* Sidebar: Staff List */}
       <div className="w-full md:w-80 flex flex-col bg-white border border-gray-200 rounded-xl shadow-sm shrink-0 overflow-hidden">
         <div className="p-5 border-b border-gray-200 bg-gray-50">
@@ -49,11 +66,10 @@ const AvailabilityContainer = () => {
             <button
               key={nurse.id}
               onClick={() => setSelectedNurseId(nurse.id)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
-                activeNurseId === nurse.id 
-                  ? 'bg-blue-50 border-blue-200 shadow-sm' 
-                  : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-200'
-              }`}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${activeNurseId === nurse.id
+                ? 'bg-blue-50 border-blue-200 shadow-sm'
+                : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-200'
+                }`}
             >
               <div className="w-10 h-10 rounded-full border border-gray-200 bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
                 {nurse.name.charAt(0)}
@@ -72,9 +88,11 @@ const AvailabilityContainer = () => {
       {/* Main Content: Calendar */}
       <div className="flex-1 flex flex-col min-w-0">
         {activeNurse ? (
-          <AvailabilityCalendar 
-            nurse={activeNurse} 
-            onUpdateAvailability={handleUpdateAvailability} 
+          <AvailabilityCalendar
+            nurse={activeNurse}
+            availabilityData={availabilityData.filter(a => a.nurseId === activeNurse.id)}
+            leaveRequestsData={leaveRequests.filter(lr => lr.nurseId === activeNurse.id && lr.status === 'approved')}
+            onUpdateAvailability={handleUpdateAvailability}
           />
         ) : (
           <div className="flex-1 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-gray-500 shadow-sm">

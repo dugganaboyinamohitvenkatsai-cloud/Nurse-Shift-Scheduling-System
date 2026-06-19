@@ -5,14 +5,21 @@ import RosterHeader from './RosterHeader';
 import DailyView from './views/DailyView';
 import WeeklyView from './views/WeeklyView';
 import MonthlyView from './views/MonthlyView';
+import CreateShiftModal from './CreateShiftModal';
 
 const RosterBuilderContainer = () => {
-  const { shifts, nurses, wards, loading, error } = useContext(ScheduleContext);
+  const { shifts, nurses, wards, loading, error, handleCreateShift } = useContext(ScheduleContext);
   const [view, setView] = useState('Weekly');
   const [currentDate, setCurrentDate] = useState(new Date());
+  
+  const [addingShift, setAddingShift] = useState(null); // { ward, date }
+
+  const handleOpenAddShift = (ward, date) => {
+    setAddingShift({ ward, date });
+  };
 
   const viewData = useMemo(() => {
-    return { shifts, nurses, wards };
+    return { shifts, nurses, wards, onAddShift: handleOpenAddShift };
   }, [shifts, nurses, wards, currentDate, view]);
 
   if (loading) {
@@ -46,6 +53,15 @@ const RosterBuilderContainer = () => {
         {view === 'Weekly' && <WeeklyView {...viewData} currentDate={currentDate} />}
         {view === 'Monthly' && <MonthlyView {...viewData} currentDate={currentDate} />}
       </div>
+
+      {addingShift && (
+        <CreateShiftModal 
+          ward={addingShift.ward} 
+          date={addingShift.date} 
+          onClose={() => setAddingShift(null)} 
+          onSave={handleCreateShift}
+        />
+      )}
     </div>
   );
 };

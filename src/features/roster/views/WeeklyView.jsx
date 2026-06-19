@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import ShiftBadge from '../ShiftBadge';
 
-const WeeklyView = ({ shifts, nurses, wards, currentDate }) => {
+const WeeklyView = ({ shifts, nurses, wards, currentDate, onAddShift }) => {
   const weekDays = useMemo(() => {
     const d = new Date(currentDate);
     const day = d.getDay();
@@ -62,7 +62,10 @@ const WeeklyView = ({ shifts, nurses, wards, currentDate }) => {
                     ))}
                     {dayShifts.length === 0 && (
                       <div className="flex-1 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="text-xs font-medium text-gray-500 hover:text-blue-600 border border-transparent hover:border-blue-200 px-3 py-1.5 rounded-md transition-colors">
+                        <button 
+                          onClick={() => onAddShift(ward, dateString)}
+                          className="text-xs font-medium text-gray-500 hover:text-blue-600 border border-transparent hover:border-blue-200 px-3 py-1.5 rounded-md transition-colors"
+                        >
                           + Add Shift
                         </button>
                       </div>

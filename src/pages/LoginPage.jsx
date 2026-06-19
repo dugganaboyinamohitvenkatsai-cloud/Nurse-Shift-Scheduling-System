@@ -2,48 +2,47 @@ import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
-/**
- * Course Alignment: CO5 (Forms, Validation, React Router)
- * 
- * Purpose:
- * Renders the login form. Uses controlled components (state tied to inputs) to handle
- * user credentials. Validates the input and uses the AuthContext to log the user in.
- * After successful login, React Router's useNavigate hook redirects the user.
- */
-
 const LoginPage = () => {
-  // Local state for the form inputs
+  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [type, setType] = useState('RN');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Access the login function from our global context
-  const { login } = useContext(AuthContext);
-  
-  // Hook for programmatic navigation
+  const { login, register } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     
-    // Basic Validation (CO5)
-    if (!username || !password) {
-      setError("Please enter both username and password.");
+    if (!username || !password || (!isLogin && !name)) {
+      setError("Please fill in all required fields.");
       return;
     }
 
-    const success = login(username, password);
-    
-    if (success) {
-      // Navigate to the correct dashboard based on role
-      if (username === 'admin') {
-        navigate('/dashboard');
+    setIsLoading(true);
+
+    if (isLogin) {
+      const success = await login(username, password);
+      if (success) {
+        const savedUser = JSON.parse(localStorage.getItem('user'));
+        navigate(savedUser?.role === 'ADMIN' ? '/dashboard' : '/nurse-dashboard');
       } else {
-        navigate('/nurse-dashboard');
+        setError("Invalid credentials.");
       }
     } else {
-      setError("Invalid credentials. Try 'admin' or 'nurse'.");
+      const result = await register({ username, password, name, type });
+      if (result.success) {
+        navigate('/nurse-dashboard');
+      } else {
+        setError(result.error || "Registration failed.");
+      }
     }
+
+    setIsLoading(false);
   };
 
   return (
@@ -60,7 +59,34 @@ const LoginPage = () => {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {!isLogin && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <input 
+                  type="text" 
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-2 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 transition-colors"
+                  placeholder="e.g. Jane Doe"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nurse Type</label>
+                <select 
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                  className="w-full px-4 py-2 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 transition-colors"
+                >
+                  <option value="RN">Registered Nurse (RN)</option>
+                  <option value="LPN">Licensed Practical Nurse (LPN)</option>
+                  <option value="CNA">Certified Nursing Assistant (CNA)</option>
+                </select>
+              </div>
+            </>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
             <input 
@@ -68,7 +94,7 @@ const LoginPage = () => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-2 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 transition-colors"
-              placeholder="Enter 'admin' or 'nurse'"
+              placeholder={isLogin ? "Enter 'admin' or 'alice'" : "Choose a username"}
             />
           </div>
           <div>
@@ -78,20 +104,32 @@ const LoginPage = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 transition-colors"
-              placeholder="Any password works"
+              placeholder={isLogin ? "Enter password" : "Create a password"}
             />
           </div>
           <button 
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded transition-colors"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded transition-colors disabled:opacity-50"
           >
-            Sign In
+            {isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Sign Up')}
           </button>
         </form>
 
+        <div className="mt-6 text-center text-sm">
+          <p className="text-gray-600">
+            {isLogin ? "Don't have an account? " : "Already have an account? "}
+            <button 
+              onClick={() => { setIsLogin(!isLogin); setError(''); }}
+              className="text-blue-600 hover:underline font-medium"
+            >
+              {isLogin ? 'Sign Up' : 'Sign In'}
+            </button>
+          </p>
+        </div>
+
         <div className="mt-8 text-center text-xs text-gray-400 border-t border-gray-100 pt-6">
           <p>Academic Project - Fall Semester</p>
-          <p>D. Mohit Venkat Sai (2520030106)</p>
         </div>
       </div>
     </div>

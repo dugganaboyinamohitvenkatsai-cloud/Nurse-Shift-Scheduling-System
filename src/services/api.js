@@ -1,100 +1,146 @@
-import { initialNurses, initialWards, initialShifts, initialLeaveRequests } from './mockData';
+import axios from 'axios';
 
-// Mock API delay for realism
-const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms));
+const api = axios.create({
+  baseURL: 'http://localhost:5000/api',
+});
 
-let shifts = [...initialShifts];
-let nurses = [...initialNurses];
-let wards = [...initialWards];
-
-export const fetchScheduleData = async () => {
-  await delay(800);
-  return { shifts, nurses, wards };
-};
-
-export const assignShift = async (shiftId, nurseId) => {
-  await delay(600);
-  const shiftIndex = shifts.findIndex(s => s.id === shiftId);
-  if (shiftIndex === -1) throw new Error("Shift not found");
-  
-  // Random failure simulation for robust async testing (10% chance)
-  if (Math.random() < 0.1) {
-    throw new Error("Race condition: Shift already modified by another user");
-  }
-  
-  shifts[shiftIndex] = { ...shifts[shiftIndex], nurseId, status: 'assigned' };
-  return shifts[shiftIndex];
-};
-
-export const updateShift = async (shiftId, updates) => {
-  await delay(600);
-  const shiftIndex = shifts.findIndex(s => s.id === shiftId);
-  if (shiftIndex === -1) throw new Error("Shift not found");
-  
-  shifts[shiftIndex] = { ...shifts[shiftIndex], ...updates };
-  return shifts[shiftIndex];
-};
-
-export const createShift = async (newShift) => {
-  await delay(600);
-  const shift = { ...newShift, id: `s${Date.now()}` };
-  shifts.push(shift);
-  return shift;
-};
-
-export const updateAvailability = async (nurseId, date, status) => {
-  await delay(600);
-  const index = nurses.findIndex(n => n.id === nurseId);
-  if (index === -1) throw new Error("Nurse not found");
-  
-  const updatedNurse = {
-    ...nurses[index],
-    availability: {
-      ...(nurses[index].availability || {}),
-      [date]: status
+// Add a request interceptor to include the JWT token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-  };
-  nurses[index] = updatedNurse;
-  return updatedNurse;
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Auth
+export const login = async (credentials) => {
+  const response = await api.post('/auth/login', credentials);
+  return response.data;
+};
+
+export const register = async (userData) => {
+  const response = await api.post('/auth/register', userData);
+  return response.data;
+};
+
+export const fetchProfile = async () => {
+  const response = await api.get('/profile');
+  return response.data;
+};
+
+export const updateProfile = async (profileData) => {
+  const response = await api.put('/profile', profileData);
+  return response.data;
+};
+
+// Resources
+export const fetchNurses = async () => {
+  const response = await api.get('/nurses');
+  return response.data;
+};
+
+export const fetchWards = async () => {
+  const response = await api.get('/wards');
+  return response.data;
+};
+
+export const fetchShifts = async () => {
+  const response = await api.get('/shifts');
+  return response.data;
+};
+
+export const createShift = async (shiftData) => {
+  const response = await api.post('/shifts', shiftData);
+  return response.data;
+};
+
+export const updateShift = async (id, updateData) => {
+  const response = await api.put(`/shifts/${id}`, updateData);
+  return response.data;
+};
+
+export const fetchLeaves = async () => {
+  const response = await api.get('/leaves');
+  return response.data;
+};
+
+export const createLeave = async (leaveData) => {
+  const response = await api.post('/leaves', leaveData);
+  return response.data;
+};
+
+export const updateLeaveStatus = async (id, status) => {
+  const response = await api.put(`/leaves/${id}`, { status });
+  return response.data;
 };
 
 export const fetchOvertimeData = async () => {
-  await delay(800);
-  // Mock overtime calculation based on nurses and shifts
-  return nurses.map(n => {
-    const worked = Math.floor(Math.random() * 30) + 20; // 20-50 hours
-    const overtime = Math.max(0, worked - 40);
+  const [nurses, shifts] = await Promise.all([
+    fetchNurses(),
+    fetchShifts()
+  ]);
+
+  return nurses.map(nurse => {
+    const nurseShifts = shifts.filter(s => s.nurseId === nurse.id && s.status === 'assigned');
+    let workedHours = 0;
+    nurseShifts.forEach(s => {
+      const start = parseInt(s.startTime.split(':')[0], 10);
+      let end = parseInt(s.endTime.split(':')[0], 10);
+      if (end < start) end += 24;
+      workedHours += (end - start);
+    });
+
+    const overtimeHours = Math.max(0, workedHours - nurse.availableHours);
     return {
-      ...n,
-      workedHours: worked,
-      overtimeHours: overtime
+      ...nurse,
+      workedHours,
+      overtimeHours
     };
   });
 };
 
-let leaveRequests = [...initialLeaveRequests];
-
-export const fetchLeaveRequests = async () => {
-  await delay(800);
-  return leaveRequests;
+// Notifications
+export const fetchNotifications = async () => {
+  const response = await api.get('/notifications');
+  return response.data;
 };
 
-export const submitLeaveRequest = async (requestData) => {
-  await delay(600);
-  const newRequest = {
-    ...requestData,
-    id: `lr${Date.now()}`,
-    status: 'pending'
-  };
-  leaveRequests = [newRequest, ...leaveRequests];
-  return newRequest;
+export const markNotificationRead = async (id) => {
+  const response = await api.put(`/notifications/${id}/read`);
+  return response.data;
 };
 
-export const updateLeaveRequestStatus = async (id, status) => {
-  await delay(600);
-  const index = leaveRequests.findIndex(lr => lr.id === id);
-  if (index === -1) throw new Error("Leave request not found");
-  
-  leaveRequests[index] = { ...leaveRequests[index], status };
-  return leaveRequests[index];
+// Shift Swaps
+export const fetchSwaps = async () => {
+  const response = await api.get('/swaps');
+  return response.data;
 };
+
+export const requestSwap = async (swapData) => {
+  const response = await api.post('/swaps', swapData);
+  return response.data;
+};
+
+export const updateSwapStatus = async (id, status) => {
+  const response = await api.put(`/swaps/${id}`, { status });
+  return response.data;
+};
+
+// Availability
+export const fetchAvailability = async () => {
+  const response = await api.get('/availability');
+  return response.data;
+};
+
+export const updateAvailability = async (availabilityData) => {
+  const response = await api.post('/availability', availabilityData);
+  return response.data;
+};
+
+export default api;

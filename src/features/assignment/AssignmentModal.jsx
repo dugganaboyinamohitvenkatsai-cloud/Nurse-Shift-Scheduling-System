@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle2, AlertCircle, Search, ShieldCheck } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Search, ShieldCheck, CalendarX } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAvailability } from '../../services/api';
 import { cn } from '../../components/common/SkeletonLoader';
 
 const AssignmentModal = ({ shift, ward, nurses, onClose, onSave }) => {
@@ -12,6 +14,11 @@ const AssignmentModal = ({ shift, ward, nurses, onClose, onSave }) => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = 'unset'; };
   }, []);
+
+  const { data: availability = [] } = useQuery({
+    queryKey: ['availability'],
+    queryFn: fetchAvailability
+  });
 
   if (!shift) return null;
 
@@ -92,6 +99,8 @@ const AssignmentModal = ({ shift, ward, nurses, onClose, onSave }) => {
           {filteredNurses.map(nurse => {
             const isSelected = selectedNurseId === nurse.id;
             const isMatch = ward?.requiredSkill === nurse.type || nurse.type === 'RN';
+            const shiftDate = new Date(shift.date).toISOString().split('T')[0];
+            const isUnavailable = availability.some(a => a.nurseId === nurse.id && new Date(a.date).toISOString().split('T')[0] === shiftDate && a.isAvailable === 0);
             
             return (
               <div 
@@ -113,7 +122,10 @@ const AssignmentModal = ({ shift, ward, nurses, onClose, onSave }) => {
                       <p className="font-bold text-gray-900 text-sm">{nurse.name}</p>
                       {isMatch && <ShieldCheck className="w-4 h-4 text-green-500" title="Skill Match" />}
                     </div>
-                    <p className="text-xs text-gray-500">{nurse.type} • {nurse.availableHours}h avail.</p>
+                    <p className="text-xs text-gray-500 flex items-center gap-2">
+                      <span>{nurse.type} • {nurse.availableHours}h avail.</span>
+                      {isUnavailable && <span className="text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded border border-red-200 flex items-center gap-1"><CalendarX className="w-3 h-3" /> Unavailable</span>}
+                    </p>
                   </div>
                 </div>
                 {isSelected && <CheckCircle2 className="w-5 h-5 text-blue-600" />}
